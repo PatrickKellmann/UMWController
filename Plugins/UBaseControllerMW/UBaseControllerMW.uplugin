@@ -1,0 +1,39 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "UBaseControllerMW",
+  "Description": "Mecanum Wheeled Robot Base Controller Simulation in Unreal Engine",
+  "Category": "Mecanum Wheel",
+  "CreatedBy": "Patrick Kellmann",
+  "CreatedByURL": "",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "CanContainContent": true,
+  "IsBetaVersion": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "UBaseControllerMW",
+      "Type": "Developer",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "UBaseControllerMWDemo",
+      "Type": "Developer",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "UBaseControllerMWDataCollector",
+      "Type": "Developer",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "LibTypeIIRML",
+      "Enabled": true
+    }
+  ]
+}
