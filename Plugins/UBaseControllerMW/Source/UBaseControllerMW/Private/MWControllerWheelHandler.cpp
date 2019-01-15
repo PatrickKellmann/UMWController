@@ -91,15 +91,11 @@ float MWControllerWheelHandler::CalcWheelDiameterInCentimeter()
 // Starts the wheel calculations and rotation position.
 void MWControllerWheelHandler::SetupWheelsMovement(const FVector Velocity)
 {
-	if (MWConComp && CheckAllWheels() && MWConComp->WheelList.Num() == 4)
+	if (MWConComp && CheckAllWheels() && CheckBase())
 	{
 		// For the angular velocity of the wheels.
 		CalcWheelsAngularVelocity(Velocity);
-		RotateWheels();
-
-		//TODO
-		// For the linear velocity of the wheels (same as base-velocity).
-		//SetWheelsMovementVelocities(Velocity);
+		RotateWheelsOnAxisY();
 	}
 	else
 	{
@@ -107,18 +103,7 @@ void MWControllerWheelHandler::SetupWheelsMovement(const FVector Velocity)
 	}
 }
 
-// This function calculates the turning of the wheels (visual component).
-void MWControllerWheelHandler::RotateWheels()
-{
-	// The wheels can only rotate freely in one axis.
-	const FRotator Rotation = MWConComp->WheelLeftFront->GetComponentRotation();
-	const FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::Y);
 
-	MWConComp->WheelLeftFront->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelLeftFrontAngularVelocity);
-	MWConComp->WheelRightFront->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelRightFrontAngularVelocity);
-	MWConComp->WheelLeftRear->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelLeftRearAngularVelocity);
-	MWConComp->WheelRightRear->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelRightRearAngularVelocity);
-}
 
 // Calculates the angular wheel velocity. 
 void MWControllerWheelHandler::CalcWheelsAngularVelocity(const FVector Velocity)
@@ -158,82 +143,16 @@ void MWControllerWheelHandler::CalcWheelsAngularVelocity(const FVector Velocity)
 	}
 }
 
-
-// Sets the linear speeds of the wheels.
-void MWControllerWheelHandler::SetWheelsMovementVelocities(const FVector Velocity)
+// Turn the wheels.
+void MWControllerWheelHandler::RotateWheelsOnAxisY()
 {
-	for (UStaticMeshComponent* Wheel : MWConComp->WheelList)
-	{
-		FVector CalcedVector = CalcLongitudinal(Velocity, Wheel) + CalcTransversal(Velocity, Wheel);
-		CalcedVector.X *= SCALE_FACTOR_M_TO_CM;
-		CalcedVector.Y *= SCALE_FACTOR_M_TO_CM;
-
-
-		if (!FMath::IsNearlyEqual(Velocity.Z, 0.f))
-		{
-
-			//TODO
-			FVector CalcedCrossVector = CalcAngular(Velocity, Wheel);
-			CalcedVector += CalcedCrossVector;
-
-			ShiftWheelsForAngularMovement(Velocity, Wheel);
-
-		}
-
-
-		Wheel->SetAllPhysicsLinearVelocity(CalcedVector, false);
-		Wheel->ComponentVelocity.Set(CalcedVector.X, CalcedVector.Y, CalcedVector.Z);
-	}
-}
-
-
-// Calculates the velocity value based on the orientation.
-FVector MWControllerWheelHandler::CalcLongitudinal(const FVector LongitudinalVelocity, const UStaticMeshComponent* Wheel)
-{
-	const FRotator Rotation = Wheel->GetComponentRotation();
-	const FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::X);
-
-	return FVector(Direction * LongitudinalVelocity.X);
-}
-
-// Calculates the velocity value based on the orientation.
-FVector MWControllerWheelHandler::CalcTransversal(const FVector TransversalVelocity, const UStaticMeshComponent* Wheel)
-{
-	const FRotator Rotation = Wheel->GetComponentRotation();
-	const FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::Y);
-
-	return FVector(Direction * TransversalVelocity.Y);
-}
-
-// Calculates the velocity value based on the orientation.
-FVector MWControllerWheelHandler::CalcAngular(const FVector AngularVelocity, const UStaticMeshComponent* Wheel)
-{
-	// TODO 
-	FVector WheelCenter = Wheel->GetCenterOfMass();
-	//FVector BaseCenter = MWConComp->Base->GetCenterOfMass();
-	//float RadiusDis = FVector::Distance(WheelCenter, BaseCenter);
-	// WheelCenter = RadiusVector
-
-	return FVector::CrossProduct(FVector(AngularVelocity), WheelCenter);
-}
-
-// TODO 
-void MWControllerWheelHandler::ShiftWheelsForAngularMovement(const FVector AngularVelocity, UStaticMeshComponent* Wheel)
-{
-	// X_Type can not rotate by definition.
-	if (MWConComp->MWType == EMWType::MW_X_Type || !CheckBase())
-	{
-		MWConComp->Base->SetAllPhysicsAngularVelocityInRadians(FVector::ZeroVector, false);
-		return;
-	}
+	// The wheels can only rotate freely in one axis.
 	const FRotator Rotation = MWConComp->Base->GetComponentRotation();
-	const FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::Z);
-	const FVector CalcedVector = Direction * AngularVelocity.Z;
+	FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::Y);
 
-	//const FRotator Rotation = Wheel->GetComponentRotation();
-	//const FVector Direction = FRotationMatrix(Rotation).GetScaledAxis(EAxis::Z);
-	//const FVector CalcedVector = Direction * AngularVelocity.Z;
 
-	Wheel->SetAllPhysicsAngularVelocityInRadians(CalcedVector);
-	Wheel->ComponentVelocity.Set(CalcedVector.X, CalcedVector.Y, CalcedVector.Z);
+	MWConComp->WheelLeftFront->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelLeftFrontAngularVelocity);
+	MWConComp->WheelRightFront->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelRightFrontAngularVelocity);
+	MWConComp->WheelLeftRear->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelLeftRearAngularVelocity);
+	MWConComp->WheelRightRear->SetAllPhysicsAngularVelocityInRadians(Direction * MWConComp->WheelRightRearAngularVelocity);
 }

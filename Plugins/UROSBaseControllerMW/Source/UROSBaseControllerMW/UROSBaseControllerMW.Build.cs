@@ -11,7 +11,6 @@ public class UROSBaseControllerMW : ModuleRules
 		
 		PublicIncludePaths.AddRange(
 			new string[] {
-				"UROSBaseControllerMW/Public"
 				// ... add public include paths required here ...
 			}
 			);

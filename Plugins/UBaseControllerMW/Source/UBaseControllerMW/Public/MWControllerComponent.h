@@ -11,22 +11,19 @@
 #include "Runtime/Engine/Classes/PhysicsEngine/PhysicsConstraintComponent.h"
 #include "MWControllerComponent.generated.h"
 
-class MWControllerBoxComponentHandler;
 class MWControllerBaseHandler;
 class MWControllerWheelHandler;
+class MWControllerConstraintHandler;
 
 #define DEVIATION_VALUE			(1.00f)
 #define HALF_DISTANCE_DIVIDER	(2.f)
-#define SCALE_FACTOR_BOXCOMP	(1.05f)
+#define SCALE_FACTOR_COLLCOMP	(1.05f)
 #define RADIUS_TO_DIAMETER		(2.f)
 #define DIAMETER_TO_RADIUS		(2.f)
 #define WHEEL_NUMBER_DIVIDER	(4.f)
 #define SCALE_FACTOR_M_TO_CM	(100.f)
 #define SCALE_FACTOR_CM_TO_M	(100.f)
 
-
-//Channel for Collisions
-#define ECC_MW					ECollisionChannel::ECC_GameTraceChannel1
 
 /*
 * Enum class that differs in X_Type and O_Type configuration.
@@ -36,6 +33,44 @@ enum class EMWType : uint8
 {
 	MW_O_Type	UMETA(DisplayName = "MW_O_Type"),
 	MW_X_Type	UMETA(DisplayName = "MW_X_Type")
+};
+
+// Structur for the constraints (base to wheel).
+USTRUCT()
+struct FConstraintStruct
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+		UPhysicsConstraintComponent* PhyCon = nullptr;
+	UPROPERTY()
+		AActor* ActorOne = nullptr;
+	UPROPERTY()
+		AActor* ActorTwo = nullptr;
+	UPROPERTY()
+		UStaticMeshComponent* MeshComp = nullptr;
+
+
+	// Constructor
+	FConstraintStruct()
+	{
+	}
+
+	FConstraintStruct(UPhysicsConstraintComponent* PhCo, AActor* ActOne, AActor* ActTwo, UStaticMeshComponent* MesCo)
+	{
+		PhyCon = PhCo;
+		ActorOne = ActOne;
+		ActorTwo = ActTwo;
+		MeshComp = MesCo;
+	}
+
+	void Destroy()
+	{
+		PhyCon = nullptr;
+		ActorOne = nullptr;
+		ActorTwo = nullptr;
+		MeshComp = nullptr;
+	}
 };
 
 /*
@@ -75,15 +110,6 @@ protected:
 	*/
 	virtual void DestroyComponent(bool bPromoteChildren) override;
 
-	/*
-	* TODO 
-	*/
-	void CreatePhysicsConstraints(UPhysicsConstraintComponent* PhyConsComp, AActor * ConstraintActor1, AActor * ConstraintActor2, UStaticMeshComponent * MeshComp);
-
-	/*
-	* TODO
-	*/
-	void DeletePhysicsConstraints();
 
 #if WITH_EDITORONLY_DATA
 
@@ -228,7 +254,7 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "MW Details|Name")
 		FString WheelNameRightRear = "Wheel_Right_Rear";
 
-	//TODO Actor for wheel StaticMeshComponents
+	// Actors of the wheels.
 	UPROPERTY(EditAnywhere, Category = "MW Details|Actors")
 		AActor* ActorWheelLF = nullptr;
 	UPROPERTY(EditAnywhere, Category = "MW Details|Actors")
@@ -238,7 +264,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MW Details|Actors")
 		AActor* ActorWheelRR = nullptr;
 
-	TArray<AActor*> WheelActorList;
+	//List of Actors who hold the wheels
+	UPROPERTY(VisibleAnywhere, Category = "MW Details|Actors")
+		TArray<AActor*> WheelActorList;
 
 	// Standardname for wheel owner. 
 	UPROPERTY(VisibleAnywhere, Category = "MW Details|Name")
@@ -250,7 +278,7 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "MW Details|Name")
 		FString MWActorWheelRRName = "MWRobotWheelRR";
 
-	//TODO Physicsconstraints 
+	// Physicsconstraints (base to wheel).
 	UPROPERTY(EditAnywhere, Category = "MW Details|PhysicsConst")
 		UPhysicsConstraintComponent* PhysicsConstBaseWheelLF = nullptr;
 	UPROPERTY(EditAnywhere, Category = "MW Details|PhysicsConst")
@@ -276,8 +304,6 @@ public:
 	UPROPERTY(VisibleInstanceOnly, Category = "MW Details|Mesh")
 		UStaticMeshComponent* WheelRightRear = nullptr;
 
-	TArray<UStaticMeshComponent*> WheelList;
-
 	// Stores the angular velocity of the wheels.
 	float WheelLeftFrontAngularVelocity = 0.f;
 	float WheelRightFrontAngularVelocity = 0.f;
@@ -288,42 +314,33 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MW Details", meta = (ToolTip = "Indicates what type the robot is. Standard is O_Type. X_Type can not rotate."))
 		EMWType MWType = EMWType::MW_O_Type;
 
-	// Saves the BoxComponents that are created or assigned.
-	UPROPERTY(EditAnywhere, Category = "MW Details|BoxComponents")
-		UBoxComponent* BoxComponentBase = nullptr;
-	UPROPERTY(EditAnywhere, Category = "MW Details|BoxComponents")
-		UBoxComponent* BoxComponentLeftFront = nullptr;
-	UPROPERTY(EditAnywhere, Category = "MW Details|BoxComponents")
-		UBoxComponent* BoxComponentRightFront = nullptr;
-	UPROPERTY(EditAnywhere, Category = "MW Details|BoxComponents")
-		UBoxComponent* BoxComponentLeftRear = nullptr;
-	UPROPERTY(EditAnywhere, Category = "MW Details|BoxComponents")
-		UBoxComponent* BoxComponentRightRear = nullptr;
-
 	// To change the angular movement polarity. 
 	UPROPERTY(EditAnywhere, Category = "MW Details",
 		meta = (ToolTip = "If the wheels move incorrectly during the angular movement of the base, the polarity can be changed here. This should only be 1.0 or -1.0!"))
 		float PolarityForAngularMovement = -1.f;
 
-	// Saves created BoxComponents that can not always be deleted cleanly via the editor so that you can remove them.
-	TMap<FString, UBoxComponent*> CreatedBoxComponentsList;
-
-	//Value for the interpolator for calculating the intermediate values. Depends on the fps of Unreal(calculation time in ms for a frame)
+	// Value for the interpolator for calculating the intermediate values. Depends on the fps of Unreal(calculation time in ms for a frame)
 	UPROPERTY(EditAnywhere, Category = "MW Details")
-		float CyleTimeInSeconds = 0.01666;
+		float CyleTimeInSeconds = 0.01666f;
+
+	// List for the constraints (base to wheel). 
+	TArray<FConstraintStruct> ConstraintList;
+
+	// Bool for testing. 
+	UPROPERTY(EditAnywhere, Category = "MW Details",
+		meta = (ToolTip = "For testing. Should be On"))
+		bool bUseWheelRotation = true;
+
+	// Prevents friction on each MW StaticMesh.
+	UPROPERTY(EditAnywhere, Category = "MW Details")
+		UPhysicalMaterial* CollisionMaterial = nullptr;
 
 private:
-
-	// Bool that indicates if the BoxComponents should be generated. 
-	UPROPERTY(EditAnywhere, Category = "MW Details",
-		meta = (ToolTip = "Specifies whether BoxComponents should be calculated automatically for collision. Default is On. Off leads to a delete of the components."))
-		bool bUseCalcedBoxComponents = true;
 
 	// Bool that indicates whether the distances should be recalculated.
 	UPROPERTY(EditAnywhere, Category = "MW Details",
 		meta = (ToolTip = "Specifies whether the calculation of the distances should happen again. Can be executed multiple times. In case of problems, messages appear."))
 		bool bCalcWheelData = false;
-
 
 	// Bool that indicates if the PhysicsConstraints should be deleted.
 	UPROPERTY(EditAnywhere, Category = "MW Details",
@@ -336,8 +353,8 @@ private:
 	// Stores the handler for tasks affecting the wheels.
 	MWControllerWheelHandler* WheelHandler = nullptr;
 
-	// Stores the handler for tasks affecting the BoxComponents. 
-	MWControllerBoxComponentHandler* BoxComponentHandler = nullptr;
+	// Stores the handler for tasks affecting the constraints.
+	MWControllerConstraintHandler* ConstraintHandler = nullptr;
 
 	// Stores the interpolator for twist values. 
 	MWControllerInterpolator* Interpolator = nullptr;

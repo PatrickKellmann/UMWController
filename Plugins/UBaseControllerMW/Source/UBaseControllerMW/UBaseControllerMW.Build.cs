@@ -14,7 +14,6 @@ public class UBaseControllerMW : ModuleRules
         PublicIncludePaths.AddRange(
 
                 new string[] {
-                "UBaseControllerMW/Public"
                     // ... add public include paths required here ...
                 }
                 );

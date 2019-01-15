@@ -3,7 +3,7 @@
 
 #include "MWControllerComponent.h"
 #include "MWControllerWheelHandler.h"
-#include "MWControllerBoxComponentHandler.h"
+#include "MWControllerConstraintHandler.h"
 #include "MWControllerBaseHandler.h"
 
 
@@ -78,25 +78,33 @@ bool UMWControllerComponent::AdjustMWControllerComponent()
 			}
 		}
 
+		// Creates a PhyMater. prevents friction.
+		CollisionMaterial = NewObject<UPhysicalMaterial>(this, TEXT("MW_CollisionMaterial"));
+		CollisionMaterial->bOverrideFrictionCombineMode = true;
+		CollisionMaterial->Friction = 0.f;
+		CollisionMaterial->FrictionCombineMode = EFrictionCombineMode::Min;
+		CollisionMaterial->Restitution = 0.f;
+		CollisionMaterial->RestitutionCombineMode = EFrictionCombineMode::Min;
+		CollisionMaterial->bOverrideRestitutionCombineMode = true;
+		CollisionMaterial->Density = 0.f;
+
+
 		// Gets wheels and the base as StaticMeshComponents.
-		// TODO Hier ändert sich die
 		TArray<UStaticMeshComponent*> MWRobotComponents;
 		MWRobotBaseActor->GetComponents<UStaticMeshComponent>(MWRobotComponents);
 
 		for (auto BaseMesh : MWRobotComponents)
 		{
-
-			// Disables gravity on all StaticMeshComponents (with the tag) and sets collision to ObjectType (own channel).
-			// The physics of the base must On, the physics of the wheels must Off. 
 			if (BaseMesh->ComponentHasTag("MWStaticMeshComponentTag") && BaseMesh->GetName().Equals(BaseName))
 			{
 				Base = BaseMesh;
 				Base->PrimaryComponentTick.TickGroup = TG_PrePhysics;
-				Base->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-				Base->SetCollisionObjectType(ECC_MW);
-				Base->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+				Base->SetCollisionProfileName(TEXT("BlockAll"));
 				Base->SetSimulatePhysics(true);
-				Base->SetEnableGravity(false);
+				Base->SetEnableGravity(true);
+
+				Base->SetMassOverrideInKg(NAME_None, 1000.f);
+				Base->SetPhysMaterialOverride(CollisionMaterial);
 			}
 		}
 
@@ -145,7 +153,7 @@ bool UMWControllerComponent::AdjustMWControllerComponent()
 			}
 		}
 
-		// Find and set the wheels.
+		// Find and set the wheels and meshes.
 		for (auto WheelActor : WheelActorList)
 		{
 			TArray<UStaticMeshComponent*> WheelStaticMeshComponentList;
@@ -155,43 +163,36 @@ bool UMWControllerComponent::AdjustMWControllerComponent()
 				if (WheelMesh->ComponentHasTag("MWStaticMeshComponentTag"))
 				{
 					WheelMesh->PrimaryComponentTick.TickGroup = TG_PrePhysics;
-					WheelMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-					WheelMesh->SetCollisionObjectType(ECC_MW);
-					WheelMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+					WheelMesh->SetCollisionProfileName(TEXT("BlockAll"));
 					WheelMesh->SetSimulatePhysics(true);
+					WheelMesh->SetEnableGravity(true);
+					WheelMesh->SetMassOverrideInKg(NAME_None, 1.f);
+					WheelMesh->SetPhysMaterialOverride(CollisionMaterial);
 				}
 
 				if (WheelMesh->GetName().Contains(WheelNameLeftFront))
 				{
 					WheelLeftFront = WheelMesh;
-					WheelLeftFront->SetEnableGravity(false);
-
 					PhysicsConstBaseWheelLF = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelLF");
-					CreatePhysicsConstraints(PhysicsConstBaseWheelLF, MWRobotBaseActor, ActorWheelLF, WheelLeftFront);
+					ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelLF, MWRobotBaseActor, ActorWheelLF, WheelLeftFront));
 				}
 				else if (WheelMesh->GetName().Contains(WheelNameRightFront))
 				{
 					WheelRightFront = WheelMesh;
-					WheelRightFront->SetEnableGravity(false);
-
 					PhysicsConstBaseWheelRF = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelRF");
-					CreatePhysicsConstraints(PhysicsConstBaseWheelRF, MWRobotBaseActor, ActorWheelRF, WheelRightFront);
+					ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelRF, MWRobotBaseActor, ActorWheelRF, WheelRightFront));
 				}
 				else if (WheelMesh->GetName().Contains(WheelNameLeftRear))
 				{
 					WheelLeftRear = WheelMesh;
-					WheelLeftRear->SetEnableGravity(false);
-
 					PhysicsConstBaseWheelLR = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelLR");
-					CreatePhysicsConstraints(PhysicsConstBaseWheelLR, MWRobotBaseActor, ActorWheelLR, WheelLeftRear);
+					ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelLR, MWRobotBaseActor, ActorWheelLR, WheelLeftRear));
 				}
 				else if (WheelMesh->GetName().Contains(WheelNameRightRear))
 				{
 					WheelRightRear = WheelMesh;
-					WheelRightRear->SetEnableGravity(false);
-
 					PhysicsConstBaseWheelRR = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelRR");
-					CreatePhysicsConstraints(PhysicsConstBaseWheelRR, MWRobotBaseActor, ActorWheelRR, WheelRightRear);
+					ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelRR, MWRobotBaseActor, ActorWheelRR, WheelRightRear));
 				}
 			}
 		}
@@ -202,16 +203,14 @@ bool UMWControllerComponent::AdjustMWControllerComponent()
 			// Creates the handlers and the interpolator for the calculations
 			BaseHandler = new MWControllerBaseHandler(this);
 			WheelHandler = new MWControllerWheelHandler(this);
-			BoxComponentHandler = new MWControllerBoxComponentHandler(this);
+			ConstraintHandler = new MWControllerConstraintHandler(this);
 			Interpolator = new MWControllerInterpolator(CyleTimeInSeconds);
 
-			
-			WheelList = { WheelLeftFront, WheelLeftRear, WheelRightFront, WheelRightRear };
-
-			TPair<float, float> CheckValues = WheelHandler->CalcDistanceBetweenWheels();
-			DistanceBetweenFrontwheels = CheckValues.Key;
-			HalfDistanceBetweenFrontRear = CheckValues.Value;
-			CombinedDistanceValue = DistanceBetweenFrontwheels + HalfDistanceBetweenFrontRear;
+			if (!ConstraintHandler->SetupPhysicsConstraints())
+			{
+				UE_LOG(LogTemp, Error,
+					TEXT("[%s][%d] Something went wrong (creating the constraints)"), TEXT(__FUNCTION__), __LINE__);
+			}
 
 			// Sees if the wheels are evenly spaced, also calculates the distances
 			if (WheelHandler->IsDistanceBetweenWheelsValid())
@@ -228,15 +227,6 @@ bool UMWControllerComponent::AdjustMWControllerComponent()
 
 				GEditor->OnModalMessageDialog(EAppMsgType::Ok,
 					FText::FromString("The distance between the wheels was wrong. Please fix it before BeginPlay otherwise the controller will be deleted."),
-					FText::FromString("MW Error Dialog"));
-			}
-
-			if (!BoxComponentHandler->CheckAndReleaseBoxComponents())
-			{
-				UE_LOG(LogTemp, Error, TEXT("[%s][%d] A problem was encountered when creating the BoxComponents. Please fix that, as these components guarantee a smooth process."), TEXT(__FUNCTION__), __LINE__);
-
-				GEditor->OnModalMessageDialog(EAppMsgType::Ok,
-					FText::FromString("A problem was encountered when creating the BoxComponents. Please fix that, as these components guarantee a smooth process."),
 					FText::FromString("MW Error Dialog"));
 			}
 
@@ -276,70 +266,31 @@ void UMWControllerComponent::PostEditChangeProperty(FPropertyChangedEvent & Prop
 	// Gets the changed property and member names
 	FName PropertyName = PropertyChangedEvent.GetPropertyName();
 
-	if (PropertyName == FName("bUseCalcedBoxComponents"))
+	if (PropertyName == FName("bUsePhysicsConstrains"))
 	{
-		//Creates or deletes the BoxComponents.
-		if (bUseCalcedBoxComponents)
-		{
-			BoxComponentHandler->CheckAndReleaseBoxComponents();
-		}
-		else
-		{
-			BoxComponentHandler->DestroyBoxComponents();
-		}
-	}
-	else if (PropertyName == FName("bUsePhysicsConstrains"))
-	{
-		//Creates or deletes the PhysicsConstraints.
+		// Creates or deletes the PhysicsConstraints.
 		if (bUsePhysicsConstrains)
 		{
 			PhysicsConstBaseWheelLF = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelLF");
-			CreatePhysicsConstraints(PhysicsConstBaseWheelLF, MWRobotBaseActor, ActorWheelLF, WheelLeftFront);
 			PhysicsConstBaseWheelRF = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelRF");
-			CreatePhysicsConstraints(PhysicsConstBaseWheelRF, MWRobotBaseActor, ActorWheelRF, WheelRightFront);
 			PhysicsConstBaseWheelLR = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelLR");
-			CreatePhysicsConstraints(PhysicsConstBaseWheelLR, MWRobotBaseActor, ActorWheelLR, WheelLeftRear);
 			PhysicsConstBaseWheelRR = NewObject<UPhysicsConstraintComponent>(this, "PhysicsConstBaseWheelRR");
-			CreatePhysicsConstraints(PhysicsConstBaseWheelRR, MWRobotBaseActor, ActorWheelRR, WheelRightRear);
+			ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelLF, MWRobotBaseActor, ActorWheelLF, WheelLeftFront));
+			ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelRF, MWRobotBaseActor, ActorWheelRF, WheelRightFront));
+			ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelLR, MWRobotBaseActor, ActorWheelLR, WheelLeftRear));
+			ConstraintList.Add(FConstraintStruct(PhysicsConstBaseWheelRR, MWRobotBaseActor, ActorWheelRR, WheelRightRear));
+
+			// Creates the constraints for the wheels. 
+			if (!ConstraintHandler->SetupPhysicsConstraints())
+			{
+				UE_LOG(LogTemp, Error,
+					TEXT("[%s][%d] Something went wrong (creating the constraints)"), TEXT(__FUNCTION__), __LINE__);
+			}
+
 		}
 		else
 		{
-			DeletePhysicsConstraints();
-		}
-	}
-	else if (PropertyName == FName("BoxComponentRightRear"))
-	{
-		if (CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameRightRear))
-		{
-			CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameRightRear)->DestroyComponent();
-		}
-	}
-	else if (PropertyName == FName("BoxComponentRightFront"))
-	{
-		if (CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameRightFront))
-		{
-			CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameRightFront)->DestroyComponent();
-		}
-	}
-	else if (PropertyName == FName("BoxComponentLeftRear"))
-	{
-		if (CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameLeftRear))
-		{
-			CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameLeftRear)->DestroyComponent();
-		}
-	}
-	else if (PropertyName == FName("BoxComponentLeftFront"))
-	{
-		if (CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameLeftFront))
-		{
-			CreatedBoxComponentsList.FindRef("BoxComponent_" + WheelNameLeftFront)->DestroyComponent();
-		}
-	}
-	else if (PropertyName == FName("BoxComponentBase"))
-	{
-		if (CreatedBoxComponentsList.FindRef("BoxComponent_" + BaseName))
-		{
-			CreatedBoxComponentsList.FindRef("BoxComponent_" + BaseName)->DestroyComponent();
+			ConstraintHandler->DeletePhysicsConstraints();
 		}
 	}
 	else if (PropertyName == FName("CyleTimeInSeconds"))
@@ -348,6 +299,17 @@ void UMWControllerComponent::PostEditChangeProperty(FPropertyChangedEvent & Prop
 		Interpolator->~MWControllerInterpolator();
 		Interpolator = nullptr;
 		Interpolator = new MWControllerInterpolator(CyleTimeInSeconds);
+	}
+	else if (PropertyName == FName("bUseWheelRotatio"))
+	{
+		if (bUseWheelRotation)
+		{
+			bUseWheelRotation = false;
+		}
+		else
+		{
+			bUseWheelRotation = true;
+		}
 	}
 	else if (PropertyName == FName("bCalcWheelData"))
 	{
@@ -399,14 +361,12 @@ void UMWControllerComponent::PostLoad()
 	if (this && this->MWRobotBaseActor)
 	{
 		// Creates the handlers and the interpolator since these are not stored by Unreal.
-		if (!BaseHandler && !WheelHandler && !BoxComponentHandler)
+		if (!BaseHandler && !WheelHandler)
 		{
 			BaseHandler = new MWControllerBaseHandler(this);
 			WheelHandler = new MWControllerWheelHandler(this);
-			BoxComponentHandler = new MWControllerBoxComponentHandler(this);
+			ConstraintHandler = new MWControllerConstraintHandler(this);
 			Interpolator = new MWControllerInterpolator(CyleTimeInSeconds);
-
-			WheelList = { WheelLeftFront, WheelLeftRear, WheelRightFront, WheelRightRear };
 		}
 	}
 }
@@ -431,12 +391,9 @@ void UMWControllerComponent::DestroyComponent(bool bPromoteChildren)
 	{
 		WheelHandler->~MWControllerWheelHandler();
 	}
-	if (BoxComponentHandler)
+	if (ConstraintHandler)
 	{
-		// All boxcomponents are always deleted for security.
-		BoxComponentHandler->DestroyBoxComponents();
-
-		BoxComponentHandler->~MWControllerBoxComponentHandler();
+		ConstraintHandler->~MWControllerConstraintHandler();
 	}
 	if (Interpolator)
 	{
@@ -444,38 +401,9 @@ void UMWControllerComponent::DestroyComponent(bool bPromoteChildren)
 	}
 	if (PhysicsConstBaseWheelLF && PhysicsConstBaseWheelRF && PhysicsConstBaseWheelLR && PhysicsConstBaseWheelRR)
 	{
-		DeletePhysicsConstraints();
+		ConstraintHandler->DeletePhysicsConstraints();
 	}
 }
-
-// TODO 
-void UMWControllerComponent::CreatePhysicsConstraints(UPhysicsConstraintComponent* PhyConsComp, AActor* ConstraintActor1, AActor* ConstraintActor2, UStaticMeshComponent* MeshComp) 
-{
-	PhyConsComp->ConstraintActor1 = ConstraintActor1;
-	PhyConsComp->ConstraintActor2 = ConstraintActor2;
-	PhyConsComp->SetConstrainedComponents(Base, NAME_None, MeshComp, NAME_None);
-	PhyConsComp->SetWorldTransform(MeshComp->GetComponentTransform());
-	PhyConsComp->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
-	PhyConsComp->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Free, 0.f);
-	PhyConsComp->SetAngularTwistLimit(EAngularConstraintMotion::ACM_Locked, 0.f);
-	PhyConsComp->bEditableWhenInherited = true;
-}
-
-void UMWControllerComponent::DeletePhysicsConstraints() 
-{
-	PhysicsConstBaseWheelLF->DestroyComponent();
-	PhysicsConstBaseWheelLF = nullptr;
-
-	PhysicsConstBaseWheelRF->DestroyComponent();
-	PhysicsConstBaseWheelRF = nullptr;
-
-	PhysicsConstBaseWheelLR->DestroyComponent();
-	PhysicsConstBaseWheelLR = nullptr;
-
-	PhysicsConstBaseWheelRR->DestroyComponent();
-	PhysicsConstBaseWheelRR = nullptr;
-}
-
 
 // Called every frame
 void UMWControllerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -492,7 +420,7 @@ void UMWControllerComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			TEXT(__FUNCTION__), __LINE__);
 	}
 
-	//Turns off the tick when problems occur, as this is safer than to destroy.
+	// Turns off the tick when problems occur, as this is safer than to destroy.
 	if (!MWRobotBaseActor || !MWRobotBaseActor->IsValidLowLevel() || !AllStaticMeshComponentsExist())
 	{
 
@@ -568,9 +496,13 @@ bool UMWControllerComponent::ReceiveROSMessage(FVector LinVel, FVector AngVel)
 // Does the work for the simulation. 
 void UMWControllerComponent::ExecuteCommandMovement(FVector MoveCom)
 {
-	WheelHandler->SetupWheelsMovement(MoveCom);
 	BaseHandler->SetBaseLinearVelocity(MoveCom);
 	BaseHandler->SetBaseAngularVelocity(MoveCom);
+
+	if (bUseWheelRotation)
+	{
+		WheelHandler->SetupWheelsMovement(MoveCom);
+	}
 }
 
 // Function looks if all elements are present and indicates which ones are missing.

@@ -10,8 +10,7 @@ public class UBaseControllerMWDataCollector : ModuleRules
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
 		PublicIncludePaths.AddRange(
-			new string[] {
-				"UBaseControllerMWDataCollector/Public"
+			new string[] {			
 				// ... add public include paths required here ...
 			}
 			);

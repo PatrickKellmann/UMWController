@@ -59,41 +59,6 @@ public:
 private:
 
 	/*
-	* Sets the linear velocites of the wheels.
-	*
-	* @param Velocity Velocites to set.
-	*/
-	void SetWheelsMovementVelocities(const FVector Velocity);
-
-	/*
-	* Sets the velocity (linear) to avoid problems.
-	*
-	* @param LongitudinalVelocity Velocity to set. 
-	* @param Wheel Wheel. 
-	*/
-	FVector CalcLongitudinal(const FVector LongitudinalVelocity, const UStaticMeshComponent* Wheel);
-
-
-	/*
-	* Sets the velocity (linear) to avoid problems.
-	*
-	* @param TransversalVelocity Velocity to set. 
-	* @param Wheel Wheel. 
-	*/
-	FVector CalcTransversal(const FVector TransversalVelocity, const UStaticMeshComponent* Wheel);
-
-	/*
-	TODO
-	*/
-	FVector CalcAngular(const FVector AngularVelocity, const UStaticMeshComponent * Wheel);
-
-
-	/*
-	TODO 
-	*/
-	void ShiftWheelsForAngularMovement(const FVector AngularVelocity, UStaticMeshComponent* Wheel);
-
-	/*
 	* Calculates the angular speed of the wheels.
 	*
 	* @param Velocity The velocity that is applied.
@@ -104,5 +69,6 @@ private:
 	* Calculates the turning of the wheels.
 	*
 	*/
-	void RotateWheels();
+	void RotateWheelsOnAxisY();
+
 };
